@@ -5,6 +5,15 @@ It handles move generation, legality, serialization, and game state for standard
 
 This project is not a chess engine/AI.
 
+Quick example:
+
+```js
+import { Chess } from '4chess';
+
+const game = new Chess();
+game.move('e4');
+```
+
 ## Why 4chess
 
 - Supports both 2-player and 4-player chess.

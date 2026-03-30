@@ -1,13 +1,27 @@
 {
   "name": "4chess",
   "version": "1.0.0",
-  "description": "> Minimal chess engine utilities: compact `Board` state and pseudo-legal move generator.",
+  "description": "Variant-aware chess rules library for 2-player and 4-player chess.",
   "main": "index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "chess-engine/",
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "node verify.js"
   },
-  "keywords": [],
+  "keywords": [
+    "chess",
+    "4-player-chess",
+    "board-games",
+    "chess-variants"
+  ],
   "author": "",
-  "license": "ISC",
-  "type": "module"
+  "license": "MIT"
 }
