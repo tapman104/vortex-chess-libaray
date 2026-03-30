@@ -1,6 +1,6 @@
 import { Board, Pieces, getType, getColor, getPiece } from '../core/board.js';
 import { GameState } from '../state/gameState.js';
-import { STANDARD, FOUR_PLAYER } from '../core/variants.js';
+import { STANDARD, FOUR_PLAYER, resolveVariant } from '../core/variants.js';
 
 function getPieceChar(piece) {
   const type = getType(piece);
@@ -27,7 +27,7 @@ function charToPiece(char, variant) {
   const isUpper = char === char.toUpperCase();
   // Map color based on variant and case
   let color = isUpper ? 0 : 1; 
-  if (variant === FOUR_PLAYER) {
+  if (variant.name === FOUR_PLAYER.name) {
       // In 4P FEN, often colors are explicitly marked or we use different chars.
       // For this implementation, we'll assume a simplified mapping or just 2 colors for now if not specified.
       // TODO: Proper 4-player piece-to-color mapping.
@@ -66,7 +66,7 @@ export function exportFEN(board, state) {
     rows.push(row);
   }
 
-  const turnChars = ['w', 'b', 'l', 'g'];
+  const turnChars = ['w', 'b', 'y', 'g'];
   const parts = [
     rows.join('/'),
     turnChars[state.turn] || 'w',
@@ -83,12 +83,13 @@ export function exportFEN(board, state) {
  * Parse a FEN string and return Board and GameState objects.
  */
 export function parseFEN(fen, variant = STANDARD) {
+  const resolvedVariant = resolveVariant(variant || STANDARD);
   const parts = fen.trim().split(/\s+/);
   if (parts.length < 2) throw new Error('Invalid FEN');
 
   const [pos, turn, castling, ep, halfmove = '0', fullmove = '1'] = parts;
 
-  const board = new Board(variant);
+  const board = new Board(resolvedVariant);
   const rows = pos.split('/');
   
   for (let r = 0; r < board.height; r++) {
@@ -108,19 +109,23 @@ export function parseFEN(fen, variant = STANDARD) {
         }
         file += parseInt(numStr);
       } else {
-        const piece = charToPiece(char, variant);
+        const piece = charToPiece(char, resolvedVariant);
         board.setByIndex(board.index(file, rank), piece);
         file++;
       }
     }
   }
 
-  const state = new GameState(variant);
-  const turnMap = { w: 0, b: 1, l: 2, g: 3 };
+  const state = new GameState(resolvedVariant);
+  const turnMap = { w: 0, b: 1, y: 2, g: 3 };
   state.turn = turnMap[turn] || 0;
+  state.castling = Array.from({ length: resolvedVariant.numPlayers }, () => ({
+    kingside: false,
+    queenside: false,
+  }));
   
   // Castling
-  if (castling !== '-') {
+  if (resolvedVariant.name === STANDARD.name && castling !== '-') {
     for (const char of castling) {
       if (char === 'K') state.castling[0].kingside = true;
       if (char === 'Q') state.castling[0].queenside = true;
@@ -145,5 +150,4 @@ function getCastlingStr(castling, variant) {
   if (castling[1].queenside) s += 'q';
   return s === '' ? '-' : s;
 }
-
 

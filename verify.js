@@ -68,7 +68,7 @@ try {
   console.log(`Board Size: ${chess4._board.width}x${chess4._board.height}`);
   if (chess4._board.width !== 14) throw new Error('4-player board width should be 14');
 
-  console.log('Testing 4-player rotation (White, Blue, Black, Green)...');
+  console.log('Testing 4-player rotation (Red, Blue, Yellow, Green)...');
   const moves4 = ['e4', 'c7', 'e11', 'l7']; // Valid pawn moves for Red, Blue, Yellow, Green
   // Note: Coordinates for 4P need to be valid. 
   // e4 is white pawn. 
@@ -81,8 +81,8 @@ try {
     chess4.move(m);
   });
 
-  console.log(`Final turn should be back to White (w). Current: ${chess4.turn()}`);
-  if (chess4.turn() !== 'w') throw new Error('4-player rotation failed');
+  console.log(`Final turn should be back to Red (r). Current: ${chess4.turn()}`);
+  if (chess4.turn() !== 'r') throw new Error('4-player rotation failed');
 
   console.log('\n✅ Public API & 4-Player Verification PASSED!');
 } catch (err) {
@@ -90,4 +90,3 @@ try {
   console.error(err.stack || err.message);
   process.exit(1);
 }
-

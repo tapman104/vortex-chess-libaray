@@ -1,6 +1,7 @@
 // Public API Layer (The main entry point for users)
 export { Chess } from './api/chess.js';
 export { InvalidMoveError, InvalidFENError } from './api/errors.js';
+export { variants, STANDARD, FOUR_PLAYER, resolveVariant, variantId } from './core/variants.js';
 
 // Core Engine Layer (Advanced usage)
 export { Board, Pieces } from './core/board.js';

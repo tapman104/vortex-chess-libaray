@@ -14,12 +14,13 @@ export function makeMove(board, state, move) {
   const piece    = board.getByIndex(from);
   const type     = getType(piece);
   const color    = getColor(piece);
-  const captured = board.getByIndex(to);
+  let captured = board.getByIndex(to);
   const variant  = board.variant;
 
   // 1. RECORD UNDO DATA
   const undo = {
-    captured,
+    captured: Pieces.EMPTY,
+    turn: state.turn,
     castling: state.castling.map(c => ({ ...c })),
     epSquare: state.epSquare,
     playerStatus: [...state.playerStatus],
@@ -42,6 +43,7 @@ export function makeMove(board, state, move) {
   if (flag === FLAGS.EP_CAPTURE) {
     const forward = variant.pawnForward[color];
     const victimIdx = to - forward;
+    captured = board.getByIndex(victimIdx);
     board.removeByIndex(victimIdx);
     board.setByIndex(to, piece);
   } else if (flag >= FLAGS.PROMO) {
@@ -49,6 +51,7 @@ export function makeMove(board, state, move) {
   } else {
     board.setByIndex(to, piece);
   }
+  undo.captured = captured;
 
   // 4. CASTLING: Physical Rook movement
   if (flag === FLAGS.CASTLE_K || flag === FLAGS.CASTLE_Q) {
@@ -126,10 +129,7 @@ export function unmakeMove(board, state, move, undo) {
   state.epSquare       = undo.epSquare;
   state.halfmoveClock  = undo.halfmoveClock;
   state.fullmoveNumber = undo.fullmoveNumber;
-  
-  // Move turn back manually (or we need a prevTurn helper)
-  // Simple hack for now: search backwards for alive player
-  moveTurnBack(state);
+  state.turn           = undo.turn;
 
   // 2. REVERT ELIMINATION
   if (undo.eliminatedAtOnce) {
@@ -160,10 +160,7 @@ export function unmakeMove(board, state, move, undo) {
   if (flag === FLAGS.EP_CAPTURE) {
     const forward = board.variant.pawnForward[color];
     const victimIdx = to - forward;
-    const enemyColor = (color + (board.variant.numPlayers / 2)) % board.variant.numPlayers; // Rough guess for 2P
-    board.setByIndex(victimIdx, undo.captured); // wait, undo.captured was empty for EP
-    // EP undo needs to store the actual captured pawn value. 
-    // Let's refine makeMove to handle this.
+    board.setByIndex(victimIdx, undo.captured);
   } else if (undo.captured !== Pieces.EMPTY) {
     board.setByIndex(to, undo.captured);
   }
@@ -172,14 +169,6 @@ export function unmakeMove(board, state, move, undo) {
   if (flag === FLAGS.CASTLE_K || flag === FLAGS.CASTLE_Q) {
     revertCastlingPhysical(board, color, flag);
   }
-}
-
-function moveTurnBack(state) {
-  const startTurn = state.turn;
-  do {
-    if (state.turn === 0) state.fullmoveNumber--;
-    state.turn = (state.turn - 1 + state.variant.numPlayers) % state.variant.numPlayers;
-  } while (!state.playerStatus[state.turn] && state.turn !== startTurn);
 }
 
 function revertCastlingPhysical(board, color, flag) {
@@ -193,4 +182,3 @@ function revertCastlingPhysical(board, color, flag) {
     }
   }
 }
-

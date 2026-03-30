@@ -1,48 +1,98 @@
 # 4chess
 
-> Minimal chess engine utilities: compact `Board` state and pseudo-legal move generator.
+`4chess` is a chess rules library for JavaScript.
+It handles move generation, legality, serialization, and game state for standard chess and 4-player chess.
 
-Features
-- Engine-friendly `Board` with 0-63 indexing, fast piece lists, and cloning.
-- Pseudo-legal move generation with compact 32-bit move encoding.
-- Intentionally minimal and GC-conscious data structures (Int8Array / Int32Array).
+This project is not a chess engine/AI.
 
-Files
-- [board.js](board.js#L1): `Board` class, piece constants, utilities, and a Unicode `toString()` for debugging.
-- [moveGen.js](moveGen.js#L1): Move encoding, `MoveList`, and `generateMoves()` with pawn, knight, sliding, and king generators.
-
-Quick usage
-
-1. Ensure Node is set to use ES modules (add `"type": "module"` to `package.json` or run with an ESM loader).
-
-2. Example script:
+## Quick Start
 
 ```js
-import { Board } from './board.js';
-import { MoveList, generateMoves } from './moveGen.js';
+import { Chess } from '4chess';
 
-const board = new Board();
-board.setup();
-
-const state = {
-  turn: 'white',
-  castling: { K: true, Q: true, k: true, q: true },
-  epSquare: null,
-};
-
-const list = new MoveList();
-generateMoves(board, state, list);
-console.log(board.toString());
-console.log('Moves generated:', list.count);
-for (let i = 0; i < list.count; i++) console.log(list.moves[i]);
+const game = new Chess({ variant: '4player@v1' });
+game.move('e4');
+console.log(game.turn()); // b
 ```
 
-Notes & next steps
-- `generateMoves()` produces pseudo-legal moves (does not filter moves that leave the king in check). Add a legality filter (using attack maps) to get fully legal moves.
-- `Board.toFEN()` is a placeholder; implement FEN import/export if you need interoperability with other tools.
+Standard chess:
 
-Contributions
-- Small, well-scoped changes welcome: tests, FEN support, perft harness, and legality filtering are natural next tasks.
+```js
+import { Chess } from '4chess';
 
-License
-- Unlicensed — add a `LICENSE` file if you intend to open-source this project.
+const game = new Chess({ variant: 'standard@v1' });
+game.move('e4');
+game.move('e5');
+console.log(game.pgn({ format: 'standard' }));
+```
+
+## Variant IDs
+
+- `standard@v1` (alias: `standard`)
+- `4player@v1` (alias: `4player`)
+
+Use versioned IDs in persisted data so future rules upgrades stay backward-compatible.
+
+## 4-Player Board Coordinates
+
+- Board size is `14x14` with `3x3` invalid corner blocks.
+- Coordinates are still algebraic (`a1` to `n14`).
+- `a1` is bottom-left from Red's perspective.
+
+Player order and pawn directions:
+
+- Red (`R`): starts at bottom, pawns move upward.
+- Blue (`B`): starts at left, pawns move rightward.
+- Yellow (`Y`): starts at top, pawns move downward.
+- Green (`G`): starts at right, pawns move leftward.
+
+## PGN Output Modes
+
+```js
+game.pgn({ format: 'standard' }); // 2-player PGN
+game.pgn({ format: '4player' });  // grouped + labeled turns, e.g. R:e4 B:c7 ...
+game.pgn({ format: 'verbose' });  // debug-oriented output with move details
+```
+
+## JSON Save/Load
+
+Core-only snapshot:
+
+```js
+const data = game.toJSON();
+```
+
+Include optional app metadata:
+
+```js
+const data = game.toJSON({ includeMeta: true });
+```
+
+Load snapshot:
+
+```js
+const game = new Chess();
+game.loadJSON(data);
+```
+
+`meta` is optional and ignored by engine rules logic.
+
+## API
+
+| Method | Description |
+| --- | --- |
+| `move(input)` | Make one legal move (`SAN` or `{ from, to, promotion? }`). |
+| `moves(opts?)` | List legal moves (SAN or verbose). |
+| `board()` | Get board snapshot (`width`, `height`, `squares`, `validSquares`, `variant`). |
+| `fen()` / `load(fen)` | Export/import FEN. |
+| `pgn(opts?)` / `loadPgn(pgn)` | Export/import PGN-like move text. |
+| `toJSON(opts?)` / `loadJSON(data)` | Export/import full game snapshot. |
+| `history(opts?)` | Move history (SAN or verbose). |
+| `undo()` | Undo last move. |
+
+## Exports
+
+```js
+import { Chess, variants } from '4chess';
+```
+

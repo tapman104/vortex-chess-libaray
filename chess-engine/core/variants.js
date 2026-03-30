@@ -27,16 +27,22 @@ export const COLORS = Object.freeze({
  */
 export const STANDARD = Object.freeze({
   name: 'standard',
+  version: 1,
+  id: 'standard@v1',
   width: 8,
   height: 8,
   numPlayers: 2,
   pawnForward: [8, -8], 
   promoRank: [7, 0],    
   startRank: [1, 6],    
+  playerLabels: ['White', 'Black'],
+  turnLabels: ['W', 'B'],
 });
 
 export const FOUR_PLAYER = Object.freeze({
   name: '4player',
+  version: 1,
+  id: '4player@v1',
   width: 14,
   height: 14,
   numPlayers: 4,
@@ -45,7 +51,56 @@ export const FOUR_PLAYER = Object.freeze({
   promoRank: [13, 13, 0, 0], // Rank 13 for Red, File 13 for Blue, Rank 0 for Yellow, File 0 for Green
   startRank: [1, 1, 12, 12], // Rank 1 for Red, File 1 for Blue, Rank 12 for Yellow, File 12 for Green
   cornerMask: 3,
+  playerLabels: ['Red', 'Blue', 'Yellow', 'Green'],
+  turnLabels: ['R', 'B', 'Y', 'G'],
 });
+
+const VARIANT_REGISTRY = new Map([
+  [STANDARD.id, STANDARD],
+  [STANDARD.name, STANDARD],
+  [FOUR_PLAYER.id, FOUR_PLAYER],
+  [FOUR_PLAYER.name, FOUR_PLAYER],
+]);
+
+export const variants = Object.freeze({
+  [STANDARD.id]: STANDARD,
+  [FOUR_PLAYER.id]: FOUR_PLAYER,
+  standard: STANDARD,
+  '4player': FOUR_PLAYER,
+});
+
+export function variantId(variant) {
+  if (variant?.id) return variant.id;
+  const name = variant?.name || 'custom';
+  const version = Number.isInteger(variant?.version) ? variant.version : 1;
+  return `${name}@v${version}`;
+}
+
+export function resolveVariant(input = STANDARD) {
+  if (!input) return STANDARD;
+
+  if (typeof input === 'string') {
+    const key = input.trim().toLowerCase();
+    const resolved = VARIANT_REGISTRY.get(key);
+    if (resolved) return resolved;
+    throw new Error(`Unknown variant: ${input}`);
+  }
+
+  if (typeof input !== 'object') {
+    throw new Error(`Invalid variant: ${String(input)}`);
+  }
+
+  if (input.id && VARIANT_REGISTRY.has(input.id)) {
+    return VARIANT_REGISTRY.get(input.id);
+  }
+
+  const normalized = {
+    ...input,
+    version: Number.isInteger(input.version) ? input.version : 1,
+  };
+  normalized.id = input.id || variantId(normalized);
+  return Object.freeze(normalized);
+}
 
 export function getPiece(color, type) {
   return (color << 3) | type;
@@ -58,4 +113,3 @@ export function getColor(piece) {
 export function getType(piece) {
   return piece & 7;
 }
-

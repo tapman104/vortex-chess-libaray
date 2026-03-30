@@ -1,122 +1,162 @@
-import { Pieces } from './board.js';
+import { Pieces, getColor, getType } from './board.js';
+import { STANDARD, variantId } from './variants.js';
 
 /**
- * zobrist.js — Position hashing for Transposition Table and repetition checks
- * Uses BigUint64Array for 64-bit precision.
+ * zobrist.js — Variant-aware position hashing for repetition and TT usage.
  */
 
-// ═══════════════════════════════════════════════════════════════════
-// RANDOM BITSTRINGS
-// ═══════════════════════════════════════════════════════════════════
+const TABLE_CACHE = new Map();
 
-// Indices for the random table:
-// 0-767    : [Square 0-63] * [Piece 0-11]
-// 768      : Turn (White=0, Black=1)
-// 769-784  : Castling (4 bits: K,Q,k,q)
-// 785-792  : EP Square File (a-h, only if EP is active)
+function seedFromString(value) {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
 
-const PIECE_KEYS    = 64 * 12;
-const TURN_KEY     = 1;
-const CASTLE_KEYS  = 16;
-const EP_FILE_KEYS = 8;
-const TOTAL_KEYS   = PIECE_KEYS + TURN_KEY + CASTLE_KEYS + EP_FILE_KEYS;
-
-const ZOBRIST_TABLE = new BigUint64Array(TOTAL_KEYS);
-
-// Deterministic seed for PRNG (using mulberry32 or simple LCG)
-function seedRandom(seed) {
-  return function() {
-    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
-    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+function makeRng(seed) {
+  let state = seed >>> 0;
+  return function next64() {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    const low = BigInt(state);
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    const high = BigInt(state);
+    return (high << 32n) | low;
   };
 }
 
-const random = seedRandom(0x4C48455353); // 'CHESS'
-
-for (let i = 0; i < TOTAL_KEYS; i++) {
-  // Generate two 32-bit randoms to make a 64-bit BigInt
-  const low  = BigInt((random() * 0xFFFFFFFF) >>> 0);
-  const high = BigInt((random() * 0xFFFFFFFF) >>> 0);
-  ZOBRIST_TABLE[i] = (high << 32n) | low;
+function variantSignature(variant) {
+  return `${variantId(variant)}|${variant.width}x${variant.height}|players=${variant.numPlayers}`;
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// UTILITIES
-// ═══════════════════════════════════════════════════════════════════
+function getTable(variant) {
+  const signature = variantSignature(variant);
+  if (TABLE_CACHE.has(signature)) {
+    return TABLE_CACHE.get(signature);
+  }
 
-function getPieceIndex(piece) {
-  // Map Pieces constant (-6 to 6, excluding 0) to 0-11
-  if (piece > 0) return piece - 1; // White: 0-5
-  return Math.abs(piece) + 5;      // Black: 6-11
+  const squareCount = variant.width * variant.height;
+  const piecesPerSquare = variant.numPlayers * 6;
+  const pieceKeys = squareCount * piecesPerSquare;
+  const turnKeys = variant.numPlayers;
+  const castlingKeys = variant.numPlayers * 2; // kingside + queenside per player
+  const epKeys = squareCount; // EP target square
+  const variantKeys = 1; // ensures variant identity is always part of hash
+
+  const offsets = {
+    piece: 0,
+    turn: pieceKeys,
+    castling: pieceKeys + turnKeys,
+    ep: pieceKeys + turnKeys + castlingKeys,
+    variant: pieceKeys + turnKeys + castlingKeys + epKeys,
+  };
+
+  const total = pieceKeys + turnKeys + castlingKeys + epKeys + variantKeys;
+  const keys = new BigUint64Array(total);
+  const next64 = makeRng(seedFromString(signature));
+
+  for (let i = 0; i < total; i++) {
+    keys[i] = next64();
+  }
+
+  const table = { keys, offsets, squareCount, piecesPerSquare, signature };
+  TABLE_CACHE.set(signature, table);
+  return table;
+}
+
+function getPieceIndex(piece, numPlayers) {
+  if (piece === Pieces.EMPTY) return -1;
+
+  const type = getType(piece);
+  const color = getColor(piece);
+  if (type < Pieces.PAWN || type > Pieces.KING) return -1;
+  if (color < 0 || color >= numPlayers) return -1;
+
+  return color * 6 + (type - 1);
 }
 
 /**
- * Computes the Zobrist hash for a complete position from scratch.
- * Use incrementally during makeMove/unmakeMove for performance.
+ * Computes a full Zobrist hash for the current position.
  *
- * @param {Board} board
- * @param {GameState} state
- * @returns {bigint}
+ * Hash components:
+ * - variant identity + dimensions + player count
+ * - pieces on valid squares
+ * - active turn (per player index)
+ * - castling rights (per player, both sides)
+ * - en-passant target square
  */
 export function computeHash(board, state) {
+  const table = getTable(board.variant);
+  const { keys, offsets, piecesPerSquare } = table;
   let hash = 0n;
 
-  // 1. Pieces
-  for (let i = 0; i < 64; i++) {
-    const piece = board.getByIndex(i);
-    if (piece !== Pieces.EMPTY) {
-      hash ^= ZOBRIST_TABLE[i * 12 + getPieceIndex(piece)];
-    }
+  // Variant identity
+  hash ^= keys[offsets.variant];
+
+  // Pieces
+  for (let sq = 0; sq < board.squares.length; sq++) {
+    if (board.validSquares[sq] === 0) continue;
+    const piece = board.getByIndex(sq);
+    const pieceIndex = getPieceIndex(piece, board.variant.numPlayers);
+    if (pieceIndex === -1) continue;
+    hash ^= keys[offsets.piece + (sq * piecesPerSquare) + pieceIndex];
   }
 
-  // 2. Turn
-  if (state.turn === 'black') {
-    hash ^= ZOBRIST_TABLE[PIECE_KEYS];
+  // Turn
+  if (Number.isInteger(state.turn) && state.turn >= 0 && state.turn < board.variant.numPlayers) {
+    hash ^= keys[offsets.turn + state.turn];
   }
 
-  // 3. Castling
-  let castleIdx = 0;
-  if (state.castling.K) castleIdx |= 1;
-  if (state.castling.Q) castleIdx |= 2;
-  if (state.castling.k) castleIdx |= 4;
-  if (state.castling.q) castleIdx |= 8;
-  hash ^= ZOBRIST_TABLE[PIECE_KEYS + TURN_KEY + castleIdx];
+  // Castling rights (per player)
+  for (let p = 0; p < board.variant.numPlayers; p++) {
+    const rights = state.castling?.[p];
+    if (!rights) continue;
+    if (rights.kingside) hash ^= keys[offsets.castling + (p * 2)];
+    if (rights.queenside) hash ^= keys[offsets.castling + (p * 2) + 1];
+  }
 
-  // 4. En Passant
-  if (state.epSquare !== null) {
-    const file = state.epSquare & 7;
-    hash ^= ZOBRIST_TABLE[PIECE_KEYS + TURN_KEY + CASTLE_KEYS + file];
+  // En passant target
+  if (Number.isInteger(state.epSquare) && board.isValidSquare(state.epSquare)) {
+    hash ^= keys[offsets.ep + state.epSquare];
   }
 
   return hash;
 }
 
-/**
- * Incremental Updates — Toggle bits for a specific property
- */
-
-export function xorPiece(hash, sq, piece) {
-  return hash ^ ZOBRIST_TABLE[sq * 12 + getPieceIndex(piece)];
+function resolveVariantForXor(context) {
+  if (context?.variant) return context.variant;
+  if (context?.width && context?.height && context?.numPlayers) return context;
+  return STANDARD;
 }
 
-export function xorTurn(hash) {
-  return hash ^ ZOBRIST_TABLE[PIECE_KEYS];
+export function xorPiece(hash, sq, piece, context = STANDARD) {
+  const variant = resolveVariantForXor(context);
+  const table = getTable(variant);
+  const pieceIndex = getPieceIndex(piece, variant.numPlayers);
+  if (pieceIndex === -1) return hash;
+  return hash ^ table.keys[table.offsets.piece + (sq * table.piecesPerSquare) + pieceIndex];
 }
 
-export function xorCastle(hash, castling) {
-  let idx = 0;
-  if (castling.K) idx |= 1;
-  if (castling.Q) idx |= 2;
-  if (castling.k) idx |= 4;
-  if (castling.q) idx |= 8;
-  return hash ^ ZOBRIST_TABLE[PIECE_KEYS + TURN_KEY + idx];
+export function xorTurn(hash, turn, context = STANDARD) {
+  const variant = resolveVariantForXor(context);
+  if (!Number.isInteger(turn) || turn < 0 || turn >= variant.numPlayers) return hash;
+  const table = getTable(variant);
+  return hash ^ table.keys[table.offsets.turn + turn];
 }
 
-export function xorEP(hash, epSquare) {
-  if (epSquare === null) return hash;
-  const file = epSquare & 7;
-  return hash ^ ZOBRIST_TABLE[PIECE_KEYS + TURN_KEY + CASTLE_KEYS + file];
+export function xorCastle(hash, playerIndex, side, context = STANDARD) {
+  const variant = resolveVariantForXor(context);
+  if (!Number.isInteger(playerIndex) || playerIndex < 0 || playerIndex >= variant.numPlayers) return hash;
+  const sideOffset = side === 'queenside' ? 1 : 0;
+  const table = getTable(variant);
+  return hash ^ table.keys[table.offsets.castling + (playerIndex * 2) + sideOffset];
 }
 
+export function xorEP(hash, epSquare, context = STANDARD) {
+  const variant = resolveVariantForXor(context);
+  if (!Number.isInteger(epSquare) || epSquare < 0 || epSquare >= (variant.width * variant.height)) return hash;
+  const table = getTable(variant);
+  return hash ^ table.keys[table.offsets.ep + epSquare];
+}

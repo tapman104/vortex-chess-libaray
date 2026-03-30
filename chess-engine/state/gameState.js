@@ -13,9 +13,10 @@ export class GameState {
     this.playerStatus = new Array(variant.numPlayers).fill(true);
 
     // Castling rights: Map of playerIndex -> { kingside: boolean, queenside: boolean }
+    const canCastleByDefault = variant.name === 'standard';
     this.castling = Array.from({ length: variant.numPlayers }, () => ({
-      kingside: true,
-      queenside: true,
+      kingside: canCastleByDefault,
+      queenside: canCastleByDefault,
     }));
 
     this.epSquare = null;      // square index for EP capture, or null
@@ -58,4 +59,3 @@ export class GameState {
     return copy;
   }
 }
-

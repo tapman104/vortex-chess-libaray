@@ -148,10 +148,12 @@ export class Board {
 
   setup() {
     this.clear();
-    if (this.variant === STANDARD) {
+    if (this.variant.name === STANDARD.name) {
       this._setupStandard();
-    } else if (this.variant === FOUR_PLAYER) {
+    } else if (this.variant.name === FOUR_PLAYER.name) {
       this._setupFourPlayer();
+    } else {
+      throw new Error(`Unsupported setup variant: ${this.variant.name}`);
     }
   }
 
@@ -241,4 +243,3 @@ export class Board {
   static color(piece) { return getColor(piece); }
   static isColor(piece, colorIndex) { return getColor(piece) === colorIndex; }
 }
-
