@@ -1,0 +1,13 @@
+{
+  "name": "4chess",
+  "version": "1.0.0",
+  "description": "> Minimal chess engine utilities: compact `Board` state and pseudo-legal move generator.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module"
+}
