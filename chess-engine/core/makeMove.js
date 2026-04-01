@@ -111,11 +111,12 @@ function updateCastlingRights(state, from, to, variant, color, type) {
 }
 
 function poofPieces(board, colorIndex) {
-  const indices = [...board.getPieces(colorIndex)];
-  for (const idx of indices) {
+  const pieces = [];
+  for (const idx of [...board.getPieces(colorIndex)]) {
+    pieces.push({ idx, piece: board.getByIndex(idx) });
     board.removeByIndex(idx);
   }
-  return indices;
+  return pieces;
 }
 
 export function unmakeMove(board, state, move, undo) {
@@ -133,16 +134,9 @@ export function unmakeMove(board, state, move, undo) {
 
   // 2. REVERT ELIMINATION
   if (undo.eliminatedAtOnce) {
-    const victimColor = getColor(undo.captured);
-    for (const idx of undo.eliminatedAtOnce) {
-      // The king was at 'to' before we poofed it, but it's handled by capture revert
-      if (idx === to) continue; 
-      // Re-setup the piece (this is slightly lossy if we don't know the exact piece TYPE, 
-      // but poof only happens on KING capture currently, so we need to store piece types too?)
-      // Actually, Poof should store (index, pieceValue) pairs.
+    for (const { idx, piece } of undo.eliminatedAtOnce) {
+      board.setByIndex(idx, piece);
     }
-    // TODO: Improve Poof undo if needed for complex search.
-    // For now, let's just make it work for King capture.
   }
 
   // 3. REVERT PIECE MOVE

@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Variant-aware chess rules library for 2-player and 4-player chess.",
   "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
   "type": "module",
   "engines": {
     "node": ">=18"
