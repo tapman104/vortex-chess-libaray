@@ -67,6 +67,16 @@ function deserializePositionCounts(entries) {
   return map;
 }
 
+function normalizeTurnToAlive(state) {
+  if (state.playerStatus.some(Boolean) === false) {
+    state.playerStatus.fill(true);
+  }
+
+  if (state.playerStatus[state.turn]) return;
+  const nextAlive = state.playerStatus.findIndex((alive) => alive);
+  state.turn = nextAlive === -1 ? 0 : nextAlive;
+}
+
 export class Chess {
   constructor(options = {}) {
     const variant = resolveVariant(options.variant || 'standard');
@@ -144,6 +154,7 @@ export class Chess {
     } else {
       state.playerStatus.fill(true);
     }
+    normalizeTurnToAlive(state);
 
     state.castling = Array.from({ length: variant.numPlayers }, (_, playerIndex) => {
       const row = data.castling?.[playerIndex];
@@ -174,6 +185,9 @@ export class Chess {
     if (data.meta && typeof data.meta === 'object') {
       this._meta = { ...data.meta };
       if (data.meta.createdAt) this._createdAt = data.meta.createdAt;
+      if (data.meta.headers && typeof data.meta.headers === 'object') {
+        this._headers = { ...data.meta.headers };
+      }
     }
 
     return this;
@@ -208,6 +222,10 @@ export class Chess {
 
   fen() {
     return exportFEN(this._board, this._state);
+  }
+
+  variant() {
+    return variantId(this._board.variant);
   }
 
   clone() {
@@ -372,6 +390,21 @@ export class Chess {
 
   ascii() {
     return this._board.toString();
+  }
+
+  header(key, value) {
+    if (typeof key !== 'string' || key.trim() === '') return this;
+    this._headers[key] = String(value);
+    return this;
+  }
+
+  headers() {
+    return { ...this._headers };
+  }
+
+  clearHeaders() {
+    this._headers = {};
+    return this;
   }
 
   board(options = {}) {

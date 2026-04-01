@@ -122,11 +122,13 @@ game.loadJSON(data);
 | --- | --- |
 | `move(input)` | Make one legal move (`SAN` or `{ from, to, promotion? }`). |
 | `moves(opts?)` | List legal moves (SAN or verbose). |
+| `variant()` | Return canonical variant id (for example `4player@v1`). |
 | `board()` | Safe board snapshot (`width`, `height`, `variant`, `cells`) with mask-respecting `null` invalid cells. |
 | `board({ raw: true })` | Raw internal snapshot (`squares`, `validSquares`) for engine/debug tooling. |
 | `fen()` / `load(fen)` | Export/import FEN. |
 | `pgn(opts?)` / `loadPgn(pgn)` | Export/import PGN-like move text. |
 | `toJSON(opts?)` / `loadJSON(data)` | Export/import full game snapshot. |
+| `header(key, value)` / `headers()` / `clearHeaders()` | Set/read/clear PGN headers. |
 | `history(opts?)` | Move history (SAN or verbose). |
 | `undo()` | Undo last move. |
 

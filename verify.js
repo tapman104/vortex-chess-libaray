@@ -108,8 +108,10 @@ try {
   );
 
   console.log('2) Variant alias resolution...');
-  const aliasVariant = new Chess({ variant: '4player' }).toJSON().variant;
+  const aliasGame = new Chess({ variant: '4player' });
+  const aliasVariant = aliasGame.toJSON().variant;
   assert.equal(aliasVariant, '4player@v1', '4player alias must resolve to 4player@v1');
+  assert.equal(aliasGame.variant(), '4player@v1', 'variant() should return canonical variant id');
 
   console.log('3) board() snapshot behavior...');
   const board4 = new Chess({ variant: '4player' }).board();
@@ -124,7 +126,26 @@ try {
   const rawBoard4 = new Chess({ variant: '4player' }).board({ raw: true });
   assert.equal(rawBoard4.validSquares[0], 0, 'Raw board should expose corner mask');
 
-  console.log('4) Error handling clarity...');
+  console.log('4) PGN header utilities + deterministic ordering...');
+  const headerGame = new Chess();
+  headerGame.header('White', 'Alpha').header('Black', 'Beta').header('Event', 'Header Test');
+  assert.equal(headerGame.headers().Event, 'Header Test', 'header()/headers() mismatch');
+
+  const headerLines = headerGame.pgn().split('\n').filter((line) => line.startsWith('['));
+  assert.ok(headerLines[0].startsWith('[Event "Header Test"]'), 'PGN headers should start with Event');
+  assert.ok(headerLines[1].startsWith('[Site "'), 'PGN headers should keep stable ordering (Site second)');
+  assert.ok(headerLines.some((line) => line.startsWith('[Variant "standard@v1"]')), 'PGN should include Variant header');
+
+  const restoredHeaderGame = new Chess().loadJSON(headerGame.toJSON({ includeMeta: true }));
+  assert.equal(
+    restoredHeaderGame.headers().Event,
+    'Header Test',
+    'Headers should be restored from meta during loadJSON',
+  );
+  restoredHeaderGame.clearHeaders();
+  assert.deepStrictEqual(restoredHeaderGame.headers(), {}, 'clearHeaders() should remove all headers');
+
+  console.log('5) Error handling clarity...');
   assert.throws(
     () => new Chess({ variant: '5player' }),
     /Invalid variant: 5player/,
@@ -138,7 +159,7 @@ try {
     'Invalid move error message mismatch',
   );
 
-  console.log('5) Deterministic JSON roundtrip...');
+  console.log('6) Deterministic JSON roundtrip...');
   const four = new Chess({ variant: '4player' });
   ['e4', 'c7', 'e11', 'l7'].forEach((m) => four.move(m));
   assertDeterministicJSONRoundtrip(four, '4-player JSON roundtrip should be deterministic');
@@ -149,12 +170,18 @@ try {
   const elimination = buildEliminationGame();
   assertDeterministicJSONRoundtrip(elimination, 'Elimination JSON roundtrip should be deterministic');
 
-  console.log('6) PGN roundtrip (4-player)...');
+  const turnPayload = new Chess().toJSON();
+  turnPayload.activePlayers = [0];
+  turnPayload.turn = 1;
+  const normalizedTurnGame = new Chess().loadJSON(turnPayload);
+  assert.equal(normalizedTurnGame.turn(), 'w', 'Dead-turn loadJSON state should normalize to next alive player');
+
+  console.log('7) PGN roundtrip (4-player)...');
   const pgn4 = four.pgn({ format: '4player' });
   const clone4 = new Chess({ variant: '4player' }).loadPgn(pgn4);
   assertSamePosition(four, clone4, '4-player PGN roundtrip must preserve position');
 
-  console.log('7) Legacy checks (repetition/checkmate)...');
+  console.log('8) Legacy checks (repetition/checkmate)...');
   const repsGame = new Chess();
   ['Nf3', 'Nf6', 'Ng1', 'Ng8', 'Nf3', 'Nf6', 'Ng1', 'Ng8', 'Nf3', 'Nf6', 'Ng1', 'Ng8']
     .forEach((m) => repsGame.move(m));

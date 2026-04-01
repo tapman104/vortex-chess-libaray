@@ -33,6 +33,32 @@ function defaultHeadersFor(variant) {
   };
 }
 
+function orderedHeaderEntries(headers, variant) {
+  const preferred = variant?.numPlayers === 4
+    ? ['Event', 'Site', 'Date', 'Round', 'Red', 'Blue', 'Yellow', 'Green', 'Result', 'Variant']
+    : ['Event', 'Site', 'Date', 'Round', 'White', 'Black', 'Result', 'Variant'];
+
+  const seen = new Set();
+  const entries = [];
+
+  for (const key of preferred) {
+    if (Object.prototype.hasOwnProperty.call(headers, key)) {
+      entries.push([key, headers[key]]);
+      seen.add(key);
+    }
+  }
+
+  const extraKeys = Object.keys(headers)
+    .filter((key) => !seen.has(key))
+    .sort((a, b) => a.localeCompare(b));
+
+  for (const key of extraKeys) {
+    entries.push([key, headers[key]]);
+  }
+
+  return entries;
+}
+
 function stripPgnHeadersAndNoise(pgn) {
   return pgn
     .replace(/\[.*?\]/g, '')
@@ -91,7 +117,7 @@ export function exportPGN(history, headers = {}, options = {}) {
   let pgn = '';
 
   if (includeHeaders) {
-    for (const [key, value] of Object.entries(allHeaders)) {
+    for (const [key, value] of orderedHeaderEntries(allHeaders, variant)) {
       pgn += `[${key} "${value}"]\n`;
     }
     pgn += '\n';

@@ -14,7 +14,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node verify.js"
+    "test": "node verify.js",
+    "prepublishOnly": "npm test"
   },
   "keywords": [
     "chess",
