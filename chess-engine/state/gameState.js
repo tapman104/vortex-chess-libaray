@@ -48,6 +48,10 @@ export class GameState {
     return this.playerStatus[playerIndex];
   }
 
+  activePlayerCount() {
+    return this.playerStatus.filter(Boolean).length;
+  }
+
   clone() {
     const copy = new GameState(this.variant);
     copy.turn = this.turn;

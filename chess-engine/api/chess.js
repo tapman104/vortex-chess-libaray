@@ -283,21 +283,14 @@ export class Chess {
 
     const undo = makeMove(this._board, this._state, moveInt);
 
-    // Iteratively handle all checkmate eliminations (chain reactions)
-    const eliminatedPlayers = this._handleCheckmateEliminations();
+    // Iteratively handle all checkmate/stalemate eliminations (chain reactions)
+    const eliminatedPlayers = this._handleAutoEliminations();
 
     // Ensure state.turn points to an alive player.
     // makeMove advanced it once, but _handleCheckmateEliminations might have killed that player.
-    if (!this._state.isPlayerAlive(this._state.turn)) {
-      // Find following alive player without skipping twice if possible
-      // Actually state.nextTurn land on the next alive one correctly.
-      let i = this._state.turn;
-      const start = i;
-      do {
-        i = (i + 1) % this._board.variant.numPlayers;
-        if (i === 0) this._state.fullmoveNumber++;
-      } while (!this._state.isPlayerAlive(i) && i !== start);
-      this._state.turn = i;
+    // Ensure state.turn points to an alive player if the game is still going.
+    if (!this._state.isPlayerAlive(this._state.turn) && this._state.activePlayerCount() >= 2) {
+      this._state.nextTurn();
     }
 
     const hash = computeHash(this._board, this._state);
@@ -350,13 +343,27 @@ export class Chess {
   }
 
   inCheckmate(playerIndex = this._state.turn) {
-    if (!this.inCheck(playerIndex)) return false;
-    return getLegalMoves(this._board, this._state, playerIndex).count === 0;
+    if (this._state.isPlayerAlive(playerIndex)) {
+      if (!this.inCheck(playerIndex)) return false;
+      return getLegalMoves(this._board, this._state, playerIndex).count === 0;
+    }
+    const last = this._history[this._history.length - 1];
+    if (last && last.eliminatedPlayers) {
+      return last.eliminatedPlayers.some((p) => p.playerIndex === playerIndex && p.reason === 'checkmate');
+    }
+    return false;
   }
 
   inStalemate(playerIndex = this._state.turn) {
-    if (this.inCheck(playerIndex)) return false;
-    return getLegalMoves(this._board, this._state, playerIndex).count === 0;
+    if (this._state.isPlayerAlive(playerIndex)) {
+      if (this.inCheck(playerIndex)) return false;
+      return getLegalMoves(this._board, this._state, playerIndex).count === 0;
+    }
+    const last = this._history[this._history.length - 1];
+    if (last && last.eliminatedPlayers) {
+      return last.eliminatedPlayers.some((p) => p.playerIndex === playerIndex && p.reason === 'stalemate');
+    }
+    return false;
   }
 
   inThreefoldRepetition() {
@@ -441,7 +448,11 @@ export class Chess {
   }
 
   isGameOver() {
-    return this.inCheckmate() || this.inDraw();
+    return (
+      (this._board.variant.numPlayers > 1 && this._state.activePlayerCount() < 2) ||
+      this.inCheckmate() ||
+      this.inDraw()
+    );
   }
 
   get(square) {
@@ -557,7 +568,7 @@ export class Chess {
     return this;
   }
 
-  _handleCheckmateEliminations() {
+  _handleAutoEliminations() {
     const eliminated = [];
     const numPlayers = this._board.variant.numPlayers;
 
@@ -567,15 +578,19 @@ export class Chess {
       for (let p = 0; p < numPlayers; p++) {
         if (!this._state.isPlayerAlive(p)) continue;
 
-        if (this.inCheckmate(p)) {
+        const checkmate = this.inCheckmate(p);
+        const stalemate = this.inStalemate(p);
+
+        if (checkmate || stalemate) {
           const pieces = poofPieces(this._board, p);
           this._state.eliminatePlayer(p);
           eliminated.push({
             playerIndex: p,
-            pieces: pieces.map(p => ({ idx: p.idx, piece: p.piece }))
+            pieces: pieces.map((p) => ({ idx: p.idx, piece: p.piece })),
+            reason: checkmate ? 'checkmate' : 'stalemate',
           });
           found = true;
-          break; // Restart scan immediately
+          break; // Restart scan immediately to handle chain reactions
         }
       }
     } while (found);
