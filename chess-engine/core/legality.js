@@ -6,14 +6,14 @@ import { isSquareAttacked, isKingInCheck } from './attackMap.js';
 /**
  * Filter all pseudo-legal moves for the current side to move.
  */
-export function getLegalMoves(board, state, playerIndex = state.turn) {
+export function getLegalMoves(board, state) {
   const pseudoList = new MoveList();
-  generateMoves(board, state, pseudoList, playerIndex);
+  generateMoves(board, state, pseudoList);
 
   const legalList = new MoveList();
   for (let i = 0; i < pseudoList.count; i++) {
     const move = pseudoList.moves[i];
-    if (isMoveLegal(board, state, move, playerIndex)) {
+    if (isMoveLegal(board, state, move)) {
       legalList.push(move);
     }
   }
@@ -24,12 +24,19 @@ export function getLegalMoves(board, state, playerIndex = state.turn) {
  * Validates if a pseudo-legal move is fully legal (doesn't leave king in check).
  * Also handles specific castling legality (cannot castle through check).
  */
-export function isMoveLegal(board, state, move, playerIndex = state.turn) {
-  const color = playerIndex;
+export function isMoveLegal(board, state, move) {
+  const color = state.turn;
+
+  // 0. In standard 2-player chess capturing the king is treated as illegal
+  // (mate detection occurs instead). For multi-player variants we allow
+  // king captures so players can be eliminated by direct capture.
+  const targetPiece = board.getByIndex(moveTo(move));
+  if (targetPiece !== Pieces.EMPTY && getType(targetPiece) === Pieces.KING && board.variant.numPlayers === 2) {
+    return false;
+  }
 
   // 1. CASTLING SPECIAL CHECK
-  if (isCastle(move)) {
-    const kingIdx = findKing(board, color);
+  if (isCastle(move)) {    const kingIdx = findKing(board, color);
     if (kingIdx === -1) return false;
 
     // Cannot castle if currently in check from ANY enemy
@@ -77,7 +84,7 @@ export function findKing(board, colorIndex) {
 /**
  * Helper: Check if current side is in check.
  */
-export function inCheck(board, state, playerIndex = state.turn) {
-  return isKingInCheck(board, playerIndex);
+export function inCheck(board, state) {
+  return isKingInCheck(board, state.turn);
 }
 

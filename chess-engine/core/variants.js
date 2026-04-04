@@ -17,8 +17,8 @@ export const TYPES = Object.freeze({
  */
 export const COLORS = Object.freeze({
   RED:    0, WHITE:  0, // Standard White
-  BLUE:   1, 
-  YELLOW: 2, BLACK:  2, // Standard Black
+  BLUE:   1, BLACK:  1, // Standard Black
+  YELLOW: 2,
   GREEN:  3,
 });
 

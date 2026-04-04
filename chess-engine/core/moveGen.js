@@ -96,13 +96,13 @@ function getTargets(board) {
 
     for (const [df, dr] of knightDeltas) {
       const nf = f + df, nr = r + dr;
-      if (nf >= 0 && nf < width && nr >= 0 && nr < width) {
+      if (nf >= 0 && nf < width && nr >= 0 && nr < height) {
         knight[idx].push(nr * width + nf);
       }
     }
     for (const [df, dr] of kingDeltas) {
       const nf = f + df, nr = r + dr;
-      if (nf >= 0 && nf < width && nr >= 0 && nr < width) {
+      if (nf >= 0 && nf < width && nr >= 0 && nr < height) {
         king[idx].push(nr * width + nf);
       }
     }
@@ -117,9 +117,9 @@ function getTargets(board) {
 // MAIN GENERATOR
 // ═══════════════════════════════════════════════════════════════════
 
-export function generateMoves(board, state, list, playerIndex = state.turn) {
+export function generateMoves(board, state, list) {
   list.clear();
-  const player = playerIndex;
+  const player = state.turn;
   const targets = getTargets(board);
 
   for (const from of board.getPieces(player)) {

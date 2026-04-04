@@ -16,7 +16,7 @@ export function isSquareAttacked(board, sq, attackerColor) {
   for (const [df, dr] of knightDeltas) {
     const f = board.file(sq) + df;
     const r = board.rank(sq) + dr;
-    if (f >= 0 && f < width && r >= 0 && r < width) {
+    if (f >= 0 && f < width && r >= 0 && r < board.height) {
       const from = board.index(f, r);
       if (board.isValidSquare(from)) {
         const p = board.getByIndex(from);
@@ -30,7 +30,7 @@ export function isSquareAttacked(board, sq, attackerColor) {
   for (const [df, dr] of kingDeltas) {
     const f = board.file(sq) + df;
     const r = board.rank(sq) + dr;
-    if (f >= 0 && f < width && r >= 0 && r < width) {
+    if (f >= 0 && f < width && r >= 0 && r < board.height) {
       const from = board.index(f, r);
       if (board.isValidSquare(from)) {
         const p = board.getByIndex(from);

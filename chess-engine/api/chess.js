@@ -26,7 +26,6 @@ function cloneUndo(undo) {
     halfmoveClock: undo.halfmoveClock,
     fullmoveNumber: undo.fullmoveNumber,
     eliminatedAtOnce: Array.isArray(undo.eliminatedAtOnce) ? [...undo.eliminatedAtOnce] : null,
-    eliminatedPlayers: Array.isArray(undo.eliminatedPlayers) ? undo.eliminatedPlayers.map((p) => ({ ...p })) : [],
   };
 }
 
@@ -38,7 +37,6 @@ function serializeHistoryEntry(entry) {
     hash: typeof entry.hash === 'bigint' ? entry.hash.toString() : entry.hash,
     move: cloneMoveObject(entry.move),
     undo: cloneUndo(entry.undo),
-    eliminatedPlayers: entry.eliminatedPlayers ? entry.eliminatedPlayers.map((p) => ({ ...p })) : [],
   };
 }
 
@@ -50,7 +48,6 @@ function deserializeHistoryEntry(entry) {
     hash: typeof entry.hash === 'string' ? BigInt(entry.hash) : BigInt(entry.hash || 0),
     move: cloneMoveObject(entry.move),
     undo: cloneUndo(entry.undo),
-    eliminatedPlayers: entry.eliminatedPlayers ? entry.eliminatedPlayers.map((p) => ({ ...p })) : [],
   };
 }
 
@@ -283,27 +280,27 @@ export class Chess {
 
     const undo = makeMove(this._board, this._state, moveInt);
 
-    // Iteratively handle all checkmate/stalemate eliminations (chain reactions)
-    const eliminatedPlayers = this._handleAutoEliminations();
-
-    // Ensure state.turn points to an alive player.
-    // makeMove advanced it once, but _handleCheckmateEliminations might have killed that player.
-    // Ensure state.turn points to an alive player if the game is still going.
-    if (!this._state.isPlayerAlive(this._state.turn) && this._state.activePlayerCount() >= 2) {
-      this._state.nextTurn();
+    // After a move in multi-player variants:
+    // 1. If a king was directly captured, eliminate that player immediately.
+    // 2. Then check if the newly active player is in checkmate (chain eliminations).
+    if (this._board.variant.numPlayers > 2) {
+      if (undo.captured !== Pieces.EMPTY && getType(undo.captured) === Pieces.KING) {
+        const capturedColor = getColor(undo.captured);
+        if (this._state.playerStatus[capturedColor]) {
+          this._state.eliminatePlayer(capturedColor);
+          const poofed = poofPieces(this._board, capturedColor);
+          if (!Array.isArray(undo.eliminatedAtOnce)) undo.eliminatedAtOnce = [];
+          undo.eliminatedAtOnce.push(...poofed);
+          // If it's now the eliminated player's turn, skip to next alive player
+          if (this._state.turn === capturedColor) this._state.nextTurn();
+        }
+      }
+      this._processCheckmateEliminations(undo);
     }
 
     const hash = computeHash(this._board, this._state);
 
-    this._history.push({
-      moveInt,
-      undo,
-      san,
-      hash,
-      player,
-      move: cloneMoveObject(moveObj),
-      eliminatedPlayers,
-    });
+    this._history.push({ moveInt, undo, san, hash, player, move: cloneMoveObject(moveObj) });
     this._incHash(hash);
 
     return moveObj;
@@ -315,19 +312,32 @@ export class Chess {
 
     this._decHash(last.hash);
     unmakeMove(this._board, this._state, last.moveInt, last.undo);
-
-    // Restore pieces for players eliminated via checkmate
-    if (last.eliminatedPlayers) {
-      for (let i = last.eliminatedPlayers.length - 1; i >= 0; i--) {
-        const { pieces } = last.eliminatedPlayers[i];
-        for (const { idx, piece } of pieces) {
-          this._board.setByIndex(idx, piece);
-        }
-      }
-    }
-
     if (last.move) return cloneMoveObject(last.move);
     return this._makeMoveObject(last.moveInt, last.san, last.player);
+  }
+
+  /**
+   * Voluntarily eliminate a player (resign in 4-player, or forfeit).
+   * For 2-player standard games this is a no-op — use server-level resign logic instead.
+   * Returns true if the player was successfully eliminated, false otherwise.
+   * @param {number} playerIndex
+   */
+  resign(playerIndex) {
+    if (!Number.isInteger(playerIndex) || playerIndex < 0 || playerIndex >= this._board.variant.numPlayers) {
+      return false;
+    }
+    if (!this._state.playerStatus[playerIndex]) return false; // already eliminated
+
+    this._state.eliminatePlayer(playerIndex);
+    poofPieces(this._board, playerIndex);
+
+    if (this._state.turn === playerIndex) {
+      this._state.nextTurn();
+    }
+
+    const hash = computeHash(this._board, this._state);
+    this._incHash(hash);
+    return true;
   }
 
   turn() {
@@ -338,32 +348,16 @@ export class Chess {
     return map[this._state.turn] || `p${this._state.turn}`;
   }
 
-  inCheck(playerIndex = this._state.turn) {
-    return inCheck(this._board, this._state, playerIndex);
+  inCheck() {
+    return inCheck(this._board, this._state);
   }
 
-  inCheckmate(playerIndex = this._state.turn) {
-    if (this._state.isPlayerAlive(playerIndex)) {
-      if (!this.inCheck(playerIndex)) return false;
-      return getLegalMoves(this._board, this._state, playerIndex).count === 0;
-    }
-    const last = this._history[this._history.length - 1];
-    if (last && last.eliminatedPlayers) {
-      return last.eliminatedPlayers.some((p) => p.playerIndex === playerIndex && p.reason === 'checkmate');
-    }
-    return false;
+  inCheckmate() {
+    return this.inCheck() && getLegalMoves(this._board, this._state).count === 0;
   }
 
-  inStalemate(playerIndex = this._state.turn) {
-    if (this._state.isPlayerAlive(playerIndex)) {
-      if (this.inCheck(playerIndex)) return false;
-      return getLegalMoves(this._board, this._state, playerIndex).count === 0;
-    }
-    const last = this._history[this._history.length - 1];
-    if (last && last.eliminatedPlayers) {
-      return last.eliminatedPlayers.some((p) => p.playerIndex === playerIndex && p.reason === 'stalemate');
-    }
-    return false;
+  inStalemate() {
+    return !this.inCheck() && getLegalMoves(this._board, this._state).count === 0;
   }
 
   inThreefoldRepetition() {
@@ -448,11 +442,23 @@ export class Chess {
   }
 
   isGameOver() {
-    return (
-      (this._board.variant.numPlayers > 1 && this._state.activePlayerCount() < 2) ||
-      this.inCheckmate() ||
-      this.inDraw()
-    );
+    // 4-player: game ends when only one player is still alive
+    if (this._board.variant.numPlayers > 2) {
+      const alive = this._state.playerStatus.filter(Boolean).length;
+      return alive <= 1;
+    }
+    return this.inCheckmate() || this.inDraw();
+  }
+
+  /**
+   * Returns the player index (0-based) of the sole surviving player,
+   * or null if the game is still ongoing / ended in a draw.
+   */
+  winner() {
+    const alive = this._state.playerStatus
+      .map((a, i) => (a ? i : -1))
+      .filter((i) => i !== -1);
+    return alive.length === 1 ? alive[0] : null;
   }
 
   get(square) {
@@ -568,34 +574,37 @@ export class Chess {
     return this;
   }
 
-  _handleAutoEliminations() {
-    const eliminated = [];
+  /**
+   * Called after every 4-player move. Checks if the newly active player (and
+   * any chain of subsequent players) has no legal moves while in check
+   * (checkmate). Each such player is eliminated and their pieces are removed.
+   * All eliminated pieces are accumulated into undo.eliminatedAtOnce so that
+   * unmakeMove can restore them on undo.
+   */
+  _processCheckmateEliminations(undo) {
+    if (!Array.isArray(undo.eliminatedAtOnce)) {
+      undo.eliminatedAtOnce = [];
+    }
+
+    // At most (numPlayers − 1) consecutive eliminations in a single move.
     const numPlayers = this._board.variant.numPlayers;
+    for (let i = 0; i < numPlayers - 1; i++) {
+      const alive = this._state.playerStatus.filter(Boolean).length;
+      if (alive <= 1) break; // Only one player left — game over
 
-    let found;
-    do {
-      found = false;
-      for (let p = 0; p < numPlayers; p++) {
-        if (!this._state.isPlayerAlive(p)) continue;
+      // Check if current player has any legal escape
+      const legal = getLegalMoves(this._board, this._state);
+      if (legal.count > 0) break; // They have moves — normal play continues
 
-        const checkmate = this.inCheckmate(p);
-        const stalemate = this.inStalemate(p);
+      // No legal moves (checkmate or stalemate) — eliminate and poof all their pieces
+      const victim = this._state.turn;
+      this._state.eliminatePlayer(victim);
+      const poofed = poofPieces(this._board, victim);
+      undo.eliminatedAtOnce.push(...poofed);
 
-        if (checkmate || stalemate) {
-          const pieces = poofPieces(this._board, p);
-          this._state.eliminatePlayer(p);
-          eliminated.push({
-            playerIndex: p,
-            pieces: pieces.map((p) => ({ idx: p.idx, piece: p.piece })),
-            reason: checkmate ? 'checkmate' : 'stalemate',
-          });
-          found = true;
-          break; // Restart scan immediately to handle chain reactions
-        }
-      }
-    } while (found);
-
-    return eliminated;
+      // Advance to the next alive player and check them too
+      this._state.nextTurn();
+    }
   }
 
   _buildMeta() {

@@ -68,14 +68,7 @@ export function makeMove(board, state, move) {
   // CASTLING RIGHTS
   updateCastlingRights(state, from, to, variant, color, type);
 
-  // 6. ELIMINATION (Capture King)
-  if (captured !== Pieces.EMPTY && getType(captured) === Pieces.KING) {
-    const victimColor = getColor(captured);
-    state.eliminatePlayer(victimColor);
-    undo.eliminatedAtOnce = poofPieces(board, victimColor);
-  }
-
-  // 7. NEXT TURN
+  // 6. NEXT TURN
   state.nextTurn();
 
   return undo;
