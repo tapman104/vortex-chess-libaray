@@ -14,7 +14,7 @@ const game = new Chess();
 game.move('e4');
 ```
 
-## Why 4chess
+## Why vortex chess libaray
 
 - Supports both 2-player and 4-player chess.
 - Variant-first architecture with versioned variant IDs.
