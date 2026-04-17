@@ -76,7 +76,7 @@ async function testStalemate() {
   game._state.turn = 0;
 
   console.log('Initial setup done.');
-  console.log('Blue is at a4 (0,3). Red moves to stalemate Blue...');
+  console.log('Blue is at d4 (3,3). Red moves to stalemate Blue...');
   
   // We need to move a piece to create stalemate for Blue.
   // Actually let's just use move() if we can fine a valid move.
@@ -86,13 +86,14 @@ async function testStalemate() {
   game.move({ from: 'h2', to: 'h3' });
   
   console.log('Player 1 (Blue) alive:', game._state.isPlayerAlive(1));
-  console.log('Blue legal moves:', game.moves({ square: 'a4' }));
+  console.log('Blue legal moves:', game.moves({ square: 'd4' }));
   console.log('Blue in check:', game.inCheck(1));
   console.log('Blue in stalemate:', game.inStalemate(1));
   console.log('Current turn:', game.turn()); // Should be 'y' (2) because Blue (1) was eliminated
 
-  console.log('Last history eliminatedPlayers:', JSON.stringify(game._history[game._history.length - 1].eliminatedPlayers, null, 2));
-  if (!game._state.isPlayerAlive(1) && game.inStalemate(1) && game._state.turn === 2) {
+  const lastHistory = game._history[game._history.length - 1];
+  console.log('Last history eliminatedPlayers:', JSON.stringify(lastHistory.eliminatedPlayers, null, 2));
+  if (!game._state.isPlayerAlive(1) && game.inStalemate(1) && game._state.turn === 2 && lastHistory.eliminatedPlayers?.includes(1)) {
     console.log('✅ Stalemate Elimination Passed');
   } else {
     console.error('❌ Stalemate Elimination Failed');

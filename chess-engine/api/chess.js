@@ -283,24 +283,37 @@ export class Chess {
     // After a move in multi-player variants:
     // 1. If a king was directly captured, eliminate that player immediately.
     // 2. Then check if the newly active player is in checkmate (chain eliminations).
+    const capturedColor = (undo.captured !== Pieces.EMPTY && getType(undo.captured) === Pieces.KING)
+      ? getColor(undo.captured)
+      : -1;
+
+    let eliminatedPlayers = [];
+
     if (this._board.variant.numPlayers > 2) {
-      if (undo.captured !== Pieces.EMPTY && getType(undo.captured) === Pieces.KING) {
-        const capturedColor = getColor(undo.captured);
-        if (this._state.playerStatus[capturedColor]) {
-          this._state.eliminatePlayer(capturedColor);
-          const poofed = poofPieces(this._board, capturedColor);
-          if (!Array.isArray(undo.eliminatedAtOnce)) undo.eliminatedAtOnce = [];
-          undo.eliminatedAtOnce.push(...poofed);
-          // If it's now the eliminated player's turn, skip to next alive player
-          if (this._state.turn === capturedColor) this._state.nextTurn();
-        }
+      if (capturedColor !== -1 && this._state.playerStatus[capturedColor]) {
+        this._state.eliminatePlayer(capturedColor);
+        const poofed = poofPieces(this._board, capturedColor);
+        if (!Array.isArray(undo.eliminatedAtOnce)) undo.eliminatedAtOnce = [];
+        undo.eliminatedAtOnce.push(...poofed);
+        eliminatedPlayers.push(capturedColor);
+        // If it's now the eliminated player's turn, skip to next alive player
+        if (this._state.turn === capturedColor) this._state.nextTurn();
       }
-      this._processCheckmateEliminations(undo);
+      const chained = this._processCheckmateEliminations(undo);
+      eliminatedPlayers.push(...chained);
     }
 
     const hash = computeHash(this._board, this._state);
 
-    this._history.push({ moveInt, undo, san, hash, player, move: cloneMoveObject(moveObj) });
+    this._history.push({ 
+      moveInt, 
+      undo, 
+      san, 
+      hash, 
+      player, 
+      move: cloneMoveObject(moveObj),
+      eliminatedPlayers: eliminatedPlayers.length > 0 ? eliminatedPlayers : undefined
+    });
     this._incHash(hash);
 
     return moveObj;
@@ -348,16 +361,25 @@ export class Chess {
     return map[this._state.turn] || `p${this._state.turn}`;
   }
 
-  inCheck() {
-    return inCheck(this._board, this._state);
+  inCheck(player) {
+    const colorIndex = this._resolvePlayer(player);
+    return inCheck(this._board, this._state, colorIndex);
   }
 
-  inCheckmate() {
-    return this.inCheck() && getLegalMoves(this._board, this._state).count === 0;
+  inCheckmate(player) {
+    const colorIndex = this._resolvePlayer(player);
+    // Use a temp state to check legality for a specific player
+    const tempState = this._state.clone();
+    tempState.turn = colorIndex;
+    return inCheck(this._board, tempState, colorIndex) && getLegalMoves(this._board, tempState).count === 0;
   }
 
-  inStalemate() {
-    return !this.inCheck() && getLegalMoves(this._board, this._state).count === 0;
+  inStalemate(player) {
+    const colorIndex = this._resolvePlayer(player);
+    // Use a temp state to check legality for a specific player
+    const tempState = this._state.clone();
+    tempState.turn = colorIndex;
+    return !inCheck(this._board, tempState, colorIndex) && getLegalMoves(this._board, tempState).count === 0;
   }
 
   inThreefoldRepetition() {
@@ -586,6 +608,7 @@ export class Chess {
       undo.eliminatedAtOnce = [];
     }
 
+    const eliminated = [];
     // At most (numPlayers − 1) consecutive eliminations in a single move.
     const numPlayers = this._board.variant.numPlayers;
     for (let i = 0; i < numPlayers - 1; i++) {
@@ -598,6 +621,7 @@ export class Chess {
 
       // No legal moves (checkmate or stalemate) — eliminate and poof all their pieces
       const victim = this._state.turn;
+      eliminated.push(victim);
       this._state.eliminatePlayer(victim);
       const poofed = poofPieces(this._board, victim);
       undo.eliminatedAtOnce.push(...poofed);
@@ -605,6 +629,7 @@ export class Chess {
       // Advance to the next alive player and check them too
       this._state.nextTurn();
     }
+    return eliminated;
   }
 
   _buildMeta() {
@@ -727,5 +752,24 @@ export class Chess {
     if (flag === FLAGS.PROMO) return 'p';
     if (flag === FLAGS.PROMO_CAPTURE) return 'm';
     return 'n';
+  }
+
+  _resolvePlayer(player) {
+    if (player === undefined || player === null) return this._state.turn;
+    if (typeof player === 'number') return player;
+    
+    const p = String(player).toLowerCase();
+    if (this._board.variant.name === 'standard') {
+      if (p === 'w' || p === 'white') return 0;
+      if (p === 'b' || p === 'black') return 1;
+    } else {
+      const map = { r: 0, red: 0, b: 1, blue: 1, y: 2, yellow: 2, g: 3, green: 3 };
+      if (map[p] !== undefined) return map[p];
+      if (p.startsWith('p')) {
+        const idx = parseInt(p.substring(1));
+        if (!isNaN(idx)) return idx;
+      }
+    }
+    return this._state.turn;
   }
 }

@@ -82,9 +82,10 @@ export function findKing(board, colorIndex) {
 }
 
 /**
- * Helper: Check if current side is in check.
+ * Helper: Check if a specific side is in check.
+ * Defaults to current side to move if colorIndex is omitted.
  */
-export function inCheck(board, state) {
-  return isKingInCheck(board, state.turn);
+export function inCheck(board, state, colorIndex = state.turn) {
+  return isKingInCheck(board, colorIndex);
 }
 

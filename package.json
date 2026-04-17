@@ -19,6 +19,7 @@
   "scripts": {
     "test": "node test/verify.js",
     "bench": "node bench/perft.js",
+    "dev": "npx http-server ui -p 8000",
     "prepublishOnly": "npm test"
   },
   "keywords": [
