@@ -645,3 +645,15 @@ body {
 .game-over-btn.secondary:hover {
   background: rgba(255,255,255,0.12);
 }
+
+.game-over-btn.tertiary {
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: 0.65rem 1rem;
+}
+
+.game-over-btn.tertiary:hover {
+  color: var(--text);
+  text-decoration: underline;
+}

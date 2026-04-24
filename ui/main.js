@@ -131,6 +131,10 @@ function init() {
   document.getElementById('btn-copy-result').addEventListener('click', () => {
     copyMoves(document.getElementById('btn-copy-result'))
   })
+
+  document.getElementById('btn-view-board').addEventListener('click', () => {
+    gameOverModal.classList.add('hidden')
+  })
 }
 
 // ── Build rank/file coordinates ──────────────────────────────────
