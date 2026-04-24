@@ -12,3 +12,7 @@ export {
 
 export * from './types.js';
 export { STANDARD, FOUR_PLAYER } from './core/variants.js';
+
+// Engine support
+export * from './engine/EngineAdapter.js';
+export { StockfishAdapter } from './engine/StockfishAdapter.js';
